@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -43,7 +42,7 @@ var config = struct {
 	category730Weapon:         "any",
 	category730TournamentTeam: "any",
 	category730StickerCapsule: "any",
-	maxPages:                  1000, //TODO: Get real max count from JSON
+	maxPages:                  100, //TODO: Get real max count from JSON
 }
 
 // Weapon info
@@ -53,12 +52,25 @@ type Weapon struct {
 	URL   string
 }
 
+// Price from DB
+type Price struct {
+	Name     string
+	NewPrice float64
+	OldPrice float64
+	MinPrice float64
+	MaxPrice float64
+}
+
 var urlbase = make(map[string]bool)
 var err error
 
 func init() {
 	config.db, err = sql.Open("sqlite3", config.dbName)
 	check(err)
+
+	if err = config.db.Ping(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func check(err error) {
@@ -135,36 +147,111 @@ func contentConverter(page string) []Weapon {
 
 }
 
-func checkPrice() Weapon {
+func setPrice(newPrice Price) {
+	tx, err := config.db.Begin()
+	check(err)
 
-	// TODO
-	var weapon Weapon
-	return weapon
+	sqlQueryPrice := "insert or replace into items (id_items, new_price, old_price, min_price, max_price) values (?, ?, ?, ?, ?)"
+
+	insertPriceState, err := tx.Prepare(sqlQueryPrice)
+	check(err)
+	defer insertPriceState.Close()
+	_, err = insertPriceState.Exec(newPrice.Name, newPrice.NewPrice, newPrice.OldPrice, newPrice.MinPrice, newPrice.MaxPrice)
+	check(err)
+
+	tx.Commit()
+
+}
+
+func getPrice(weapon Weapon) Price {
+
+	var price Price
+	sqlSelectQuery := "select new_price, old_price, min_price, max_price from items where id_items=?"
+	query, err := config.db.Prepare(sqlSelectQuery)
+	check(err)
+	defer query.Close()
+
+	var newPrice float64
+	var oldPrice float64
+	var minPrice float64
+	var maxPrice float64
+
+	err = query.QueryRow(weapon.Name).Scan(&newPrice, &oldPrice, &minPrice, &maxPrice)
+	if err != nil {
+
+		newPrice = 0
+		oldPrice = 0
+		minPrice = 0
+		maxPrice = 0
+	}
+	price.Name = weapon.Name
+	price.NewPrice = newPrice
+	price.OldPrice = oldPrice
+	price.MinPrice = minPrice
+	price.MaxPrice = maxPrice
+
+	//log.Println(price)
+	return price
+
+}
+
+func processing(page string) {
+
+	weaponPack := contentConverter(page)
+
+	for _, weapon := range weaponPack {
+		if weapon.Name == "" {
+			continue
+		}
+		currentPrice := getPrice(weapon)
+		var newPrice Price
+		if currentPrice.OldPrice == 0 {
+			newPrice.Name = weapon.Name
+			newPrice.NewPrice = weapon.Price
+			newPrice.OldPrice = weapon.Price
+			newPrice.MinPrice = weapon.Price
+			newPrice.MaxPrice = weapon.Price
+			setPrice(newPrice)
+		} else {
+			currentPrice.OldPrice = currentPrice.NewPrice
+			currentPrice.NewPrice = weapon.Price
+			if weapon.Price < currentPrice.MinPrice {
+				currentPrice.MinPrice = weapon.Price
+			}
+			if weapon.Price > currentPrice.MaxPrice {
+				currentPrice.MaxPrice = weapon.Price
+			}
+			setPrice(currentPrice)
+
+		}
+		//Main trigger
+		if currentPrice.NewPrice < currentPrice.OldPrice {
+			log.Println("!!! Difference...", currentPrice.NewPrice, " and ", currentPrice.OldPrice)
+
+		}
+		//log.Println("Processing..." + weapon.Name)
+
+	}
+
 }
 
 func main() {
+	for {
+		c := make(chan string, 10)
+		for i := 1; i < config.maxPages; i += config.count {
+			go pageParser(i, c)
 
-	c := make(chan string, 10)
-	///body := pageParser(1, c)
-	for i := 1; i < config.maxPages; i += config.count {
-		go pageParser(i, c)
-
-		select {
-		case pass := <-c:
-			fmt.Println(0, i)
-			contentConverter(pass)
-		case pass1 := <-c:
-			fmt.Println(1, i)
-			contentConverter(pass1)
-		case pass2 := <-c:
-			fmt.Println(2, i)
-			contentConverter(pass2)
-		case pass3 := <-c:
-			fmt.Println(3, i)
-			contentConverter(pass3)
-
+			select {
+			case pass := <-c:
+				//fmt.Println(0, i)
+				processing(pass)
+			case pass1 := <-c:
+				//fmt.Println(1, i)
+				processing(pass1)
+			}
+			time.Sleep(time.Second)
 		}
-		time.Sleep(time.Second)
+		time.Sleep(time.Second * 300)
 	}
 
 }
