@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -11,8 +12,17 @@ import (
 	"strings"
 	"time"
 
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	_ "github.com/mattn/go-sqlite3"
 )
+
+var botconfig = struct {
+	apiKey string
+	chatID int64
+}{
+	apiKey: "CHANGE_ME",
+	chatID: 666,
+}
 
 var config = struct {
 	db                        *sql.DB
@@ -29,20 +39,22 @@ var config = struct {
 	category730TournamentTeam string
 	category730StickerCapsule string
 	maxPages                  int
+	discount                  int
 }{
 	dbName:                    "steam_database.sqlite",
 	query:                     "",
 	appid:                     "730",
 	url:                       "http://steamcommunity.com",
 	sortDir:                   "desc",
-	count:                     10,
+	count:                     100,
 	searchDescriptions:        "0",
 	sortColumn:                "price",
 	category730ProPlayer:      "any",
 	category730Weapon:         "any",
 	category730TournamentTeam: "any",
 	category730StickerCapsule: "any",
-	maxPages:                  100, //TODO: Get real max count from JSON
+	maxPages:                  100,
+	discount:                  20,
 }
 
 // Weapon info
@@ -80,16 +92,12 @@ func init() {
 func pageParser(start int, c chan string) {
 
 	var URL *url.URL
-
 	URL, err := URL.Parse(config.url + "/market/search/render/")
 	check(err)
-
 	parameters := url.Values{}
-
 	parameters.Add("query", config.query)
 	parameters.Add("appid", config.appid)
 	parameters.Add("start", strconv.Itoa(start))
-
 	parameters.Add("count", strconv.Itoa(config.count))
 	parameters.Add("category_730_ProPlayer[]", config.category730ProPlayer)
 	parameters.Add("category_730_StickerCapsule[]", config.category730StickerCapsule)
@@ -101,25 +109,39 @@ func pageParser(start int, c chan string) {
 	req, _ := http.NewRequest("GET", URL.String(), nil)
 	resp, err := client.Do(req)
 	check(err)
+	if resp.Status != "200 OK" {
+		log.Println("Scanner in cool down, wait 1 minute")
+		time.Sleep(time.Minute)
+		c <- "Ready"
 
+	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	check(err)
+
 	c <- string(body)
-	//return string(body)
 
 }
 
 func contentConverter(page string) []Weapon {
-
 	weaponPack := make([]Weapon, config.count)
+	// Emergency out
+	if !strings.Contains(page, "results_html") {
+		return weaponPack
+	}
 
+	// Getting total_count
+	totalCount := regexp.MustCompile(`total_count":\d*`).FindString(page)
+	//fmt.Println(page)
+	config.maxPages, err = strconv.Atoi(strings.Split(totalCount, ":")[1])
+	check(err)
+	// Main parsing
 	page = regexp.MustCompile("\\\\").ReplaceAllString(page, "")
 	output := strings.Split(page, "class")
 	var weapon Weapon
 
 	for _, value := range output {
-		// Ugly parsing. Fkn Steam.
+		// Ugly ,fkn Steam.
 		if strings.Contains(value, "market_listing_row_link") {
 			urlArray := strings.Split(value, "\"")
 			weapon.URL = urlArray[3]
@@ -217,9 +239,13 @@ func processing(page string) {
 
 		}
 		//Main trigger
-		if (currentPrice.NewPrice * 100 / currentPrice.OldPrice) <= 80 { // Discount more then 20%
-
-			log.Println("↓ 20% > ", currentPrice.NewPrice, " and ", currentPrice.OldPrice, " ", weapon.Name)
+		if (currentPrice.NewPrice * 100 / currentPrice.OldPrice) <= float64(100-config.discount) {
+			sDiscount := strconv.Itoa(config.discount)
+			sNewPrice := strconv.FormatFloat(currentPrice.NewPrice, 'f', -1, 64)
+			sOldPrice := strconv.FormatFloat(currentPrice.OldPrice, 'f', -1, 64)
+			message := "↓" + sDiscount + " > " + sNewPrice + "/" + sOldPrice + " " + weapon.Name + " " + weapon.URL
+			tellMeBot(message)
+			log.Println("↓", config.discount, ">", currentPrice.NewPrice, "/", currentPrice.OldPrice, weapon.Name, weapon.URL)
 
 		}
 
@@ -227,23 +253,36 @@ func processing(page string) {
 
 }
 
+func tellMeBot(message string) {
+	bot, err := tgbotapi.NewBotAPI(botconfig.apiKey)
+	check(err)
+	msg := tgbotapi.NewMessage(botconfig.chatID, "")
+	msg.Text = message
+	bot.Send(msg)
+
+}
+
 func main() {
 	for {
-		c := make(chan string, 10)
+		c := make(chan string, config.count)
 		for i := 1; i < config.maxPages; i += config.count {
 			go pageParser(i, c)
 
 			select {
 			case pass := <-c:
-				//fmt.Println(0, i)
+				fmt.Println("#gorutine:", 0, " #page:", i)
 				processing(pass)
 			case pass1 := <-c:
-				//fmt.Println(1, i)
+				fmt.Println("#gorutine:", 1, " #page:", i)
 				processing(pass1)
+
+			case pass2 := <-c:
+				fmt.Println("#gorutine:", 2, " #page:", i)
+				processing(pass2)
 			}
 			time.Sleep(time.Second)
 		}
-		time.Sleep(time.Second * 300)
+		time.Sleep(time.Second)
 	}
 
 }
