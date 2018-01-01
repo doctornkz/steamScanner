@@ -226,7 +226,7 @@ func processing(page string) {
 		}
 		//Main trigger
 		if currentPrice.NewPrice < currentPrice.OldPrice {
-			log.Println("!!! Difference...", currentPrice.NewPrice, " and ", currentPrice.OldPrice)
+			log.Println("!!! Difference...", currentPrice.NewPrice, " and ", currentPrice.OldPrice, " URL: ", weapon.URL)
 
 		}
 		//log.Println("Processing..." + weapon.Name)
