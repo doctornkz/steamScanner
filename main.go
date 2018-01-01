@@ -61,20 +61,18 @@ type Price struct {
 	MaxPrice float64
 }
 
-var urlbase = make(map[string]bool)
 var err error
 
+func check(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 func init() {
 	config.db, err = sql.Open("sqlite3", config.dbName)
 	check(err)
 
 	if err = config.db.Ping(); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func check(err error) {
-	if err != nil {
 		log.Fatal(err)
 	}
 }
@@ -125,24 +123,19 @@ func contentConverter(page string) []Weapon {
 		if strings.Contains(value, "market_listing_row_link") {
 			urlArray := strings.Split(value, "\"")
 			weapon.URL = urlArray[3]
-			//fmt.Println(weapon.URL)
 		} else if strings.Contains(value, "\"normal_price") {
 			priceString := regexp.MustCompile(`\d*[.]\d*`).FindString(value)
 			weapon.Price, err = strconv.ParseFloat(priceString, 64)
 			check(err)
-			//fmt.Println(weapon.Price)
 		} else if strings.Contains(value, "market_listing_item_name\"") {
-			//fmt.Println(value)
 			nameArray := strings.Split(value, ">")
 			nameArray = strings.Split(nameArray[1], "<")
 			nameString := nameArray[0]
 			weapon.Name = nameString
-			//fmt.Println(weapon.Name)
 		} else if strings.Contains(value, "/a") {
 			weaponPack = append(weaponPack, weapon)
 		}
 	}
-	//log.Println(weaponPack)
 	return weaponPack
 
 }
@@ -190,7 +183,6 @@ func getPrice(weapon Weapon) Price {
 	price.MinPrice = minPrice
 	price.MaxPrice = maxPrice
 
-	//log.Println(price)
 	return price
 
 }
@@ -225,11 +217,11 @@ func processing(page string) {
 
 		}
 		//Main trigger
-		if currentPrice.NewPrice < currentPrice.OldPrice {
-			log.Println("!!! Difference...", currentPrice.NewPrice, " and ", currentPrice.OldPrice, " URL: ", weapon.URL)
+		if (currentPrice.NewPrice * 100 / currentPrice.OldPrice) <= 80 { // Discount more then 20%
+
+			log.Println("↓ 20% > ", currentPrice.NewPrice, " and ", currentPrice.OldPrice, " ", weapon.Name)
 
 		}
-		//log.Println("Processing..." + weapon.Name)
 
 	}
 
