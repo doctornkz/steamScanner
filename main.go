@@ -18,11 +18,11 @@ import (
 )
 
 var botconfig = struct {
-	apiKey string
-	chatID int64
+	tAPIKey string
+	tChat   int64
 }{
-	apiKey: "CHANGE_ME",
-	chatID: 0,
+	tAPIKey: "PLEASE_CHANGE_ME",
+	tChat:   0, // PLEASE CHANGE ME
 }
 
 var config = struct {
@@ -41,8 +41,6 @@ var config = struct {
 	category730StickerCapsule string
 	maxPages                  int
 	discount                  int
-	tAPIKey                   string
-	tChat                     int64
 }{
 	dbName:                    "steam_database.sqlite",
 	query:                     "",
@@ -58,8 +56,6 @@ var config = struct {
 	category730StickerCapsule: "any",
 	maxPages:                  100,
 	discount:                  20,
-	tAPIKey:                   "PLEASE_CHANGE_ME",
-	tChat:                     0, // PLEASE CHANGE ME
 }
 
 // Weapon info
@@ -93,12 +89,12 @@ func init() {
 		log.Fatal(err)
 	}
 
-	tAPIKeyF := flag.String("telegram-api-key", config.tAPIKey, "Telegram API KEY")
-	tChatF := flag.Int64("telegram-channel", config.tChat, " Telegram Channel ID (default 0)")
+	tAPIKeyF := flag.String("telegram-api-key", botconfig.tAPIKey, "Telegram API KEY")
+	tChatF := flag.Int64("telegram-channel", botconfig.tChat, " Telegram Channel ID (default 0)")
 	flag.Parse()
 
-	config.tAPIKey = *tAPIKeyF
-	config.tChat = *tChatF
+	botconfig.tAPIKey = *tAPIKeyF
+	botconfig.tChat = *tChatF
 
 }
 
@@ -267,9 +263,9 @@ func processing(page string) {
 }
 
 func tellMeBot(message string) {
-	bot, err := tgbotapi.NewBotAPI(botconfig.apiKey)
+	bot, err := tgbotapi.NewBotAPI(botconfig.tAPIKey)
 	check(err)
-	msg := tgbotapi.NewMessage(botconfig.chatID, "")
+	msg := tgbotapi.NewMessage(botconfig.tChat, "")
 	msg.Text = message
 	bot.Send(msg)
 
