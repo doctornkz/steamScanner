@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -40,6 +41,8 @@ var config = struct {
 	category730StickerCapsule string
 	maxPages                  int
 	discount                  int
+	tAPIKey                   string
+	tChat                     int64
 }{
 	dbName:                    "steam_database.sqlite",
 	query:                     "",
@@ -55,6 +58,8 @@ var config = struct {
 	category730StickerCapsule: "any",
 	maxPages:                  100,
 	discount:                  20,
+	tAPIKey:                   "PLEASE_CHANGE_ME",
+	tChat:                     0, // PLEASE CHANGE ME
 }
 
 // Weapon info
@@ -87,6 +92,14 @@ func init() {
 	if err = config.db.Ping(); err != nil {
 		log.Fatal(err)
 	}
+
+	tAPIKeyF := flag.String("telegram-api-key", config.tAPIKey, "Telegram API KEY")
+	tChatF := flag.Int64("telegram-channel", config.tChat, " Telegram Channel ID (default 0)")
+	flag.Parse()
+
+	config.tAPIKey = *tAPIKeyF
+	config.tChat = *tChatF
+
 }
 
 func pageParser(start int, c chan string) {
