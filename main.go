@@ -21,7 +21,7 @@ var botconfig = struct {
 	chatID int64
 }{
 	apiKey: "CHANGE_ME",
-	chatID: 666,
+	chatID: 0,
 }
 
 var config = struct {
@@ -105,7 +105,7 @@ func pageParser(start int, c chan string) {
 	parameters.Add("category_730_Weapon[]", config.category730Weapon)
 	URL.RawQuery = parameters.Encode()
 
-	client := http.Client{Timeout: time.Duration(60) * time.Second}
+	client := http.Client{Timeout: time.Duration(600) * time.Second}
 	req, _ := http.NewRequest("GET", URL.String(), nil)
 	resp, err := client.Do(req)
 	check(err)

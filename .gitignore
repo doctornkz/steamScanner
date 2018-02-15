@@ -1,1 +1,9 @@
 steam_database.sqlite
+
+settings.ini
+
+Gopkg.lock
+
+Gopkg.toml
+
+vendor
